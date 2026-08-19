@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0f17" id="themeColorMeta">
+  <meta name="description" content="A mobile-first off-season strength and progression tracker for baseball pitchers.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Pitcher OS">
+  <title>Pitcher OS</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+</head>
+<body>
+  <div id="bootScreen" class="boot-screen" aria-live="polite">
+    <div class="brand-lockup brand-lockup--center">
+      <div class="brand-mark" aria-hidden="true"><span>P</span></div>
+      <div><strong>Pitcher OS</strong><span>Building your training space</span></div>
+    </div>
+    <div class="boot-line"><span></span></div>
+  </div>
+
+  <section id="setupScreen" class="gate-screen hidden" aria-labelledby="setupTitle">
+    <div class="gate-shell">
+      <div class="gate-visual">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true"><span>P</span></div>
+          <div><strong>Pitcher OS</strong><span>Strength. Power. Durability.</span></div>
+        </div>
+        <div class="visual-copy">
+          <span class="kicker">Cloud edition</span>
+          <h1>Train consistently.<br>Keep the evidence.</h1>
+          <p>Dated sessions, measurable check-ins and secure account-based sync across devices.</p>
+        </div>
+        <div class="visual-metrics" aria-hidden="true">
+          <div><strong>3</strong><span>strength days</span></div>
+          <div><strong>4 wk</strong><span>check-ins</span></div>
+          <div><strong>1–3</strong><span>reps in reserve</span></div>
+        </div>
+      </div>
+
+      <div class="gate-card">
+        <span class="status-dot status-dot--warning">Backend setup required</span>
+        <h2 id="setupTitle">Connect the app once</h2>
+        <p>This build is ready for Supabase authentication and cloud storage. Add your project URL and publishable key to <code>config.js</code>, then run the included SQL file.</p>
+        <ol class="setup-list">
+          <li><span>1</span><div><strong>Create a Supabase project</strong><small>A free project is enough to start.</small></div></li>
+          <li><span>2</span><div><strong>Run <code>supabase-setup.sql</code></strong><small>This creates the tables and per-user security rules.</small></div></li>
+          <li><span>3</span><div><strong>Edit <code>config.js</code></strong><small>Paste the project URL and publishable key.</small></div></li>
+        </ol>
+        <div class="button-stack">
+          <button class="btn btn--primary" id="retryBackendBtn" type="button">Check connection</button>
+          <button class="btn btn--quiet" id="previewModeBtn" type="button">Preview without an account</button>
+        </div>
+        <p class="fine-print">Preview mode saves only to this browser. Shared, cross-device accounts require the backend connection.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="authScreen" class="gate-screen hidden" aria-labelledby="authTitle">
+    <div class="gate-shell">
+      <div class="gate-visual">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true"><span>P</span></div>
+          <div><strong>Pitcher OS</strong><span>Strength. Power. Durability.</span></div>
+        </div>
+        <div class="visual-copy">
+          <span class="kicker">Off-season system</span>
+          <h1>Build usable force.<br>Track real progress.</h1>
+          <p>No random exercise roulette. Follow the plan, log the work and measure what improves.</p>
+        </div>
+        <div class="auth-proof">
+          <div class="proof-icon" aria-hidden="true">↗</div>
+          <p><strong>Your data stays separated by account.</strong><span>The app only asks for an email, password and optional display name.</span></p>
+        </div>
+      </div>
+
+      <div class="gate-card auth-card">
+        <div class="auth-tabs" role="tablist" aria-label="Authentication options">
+          <button class="auth-tab active" id="signInTab" data-auth-panel="signInPanel" role="tab" aria-selected="true" type="button">Sign in</button>
+          <button class="auth-tab" id="signUpTab" data-auth-panel="signUpPanel" role="tab" aria-selected="false" type="button">Create account</button>
+        </div>
+
+        <div id="signInPanel" class="auth-panel active" role="tabpanel">
+          <span class="kicker">Welcome back</span>
+          <h2 id="authTitle">Open your training log</h2>
+          <form id="signInForm" class="stack-form">
+            <label class="field">
+              <span>Email</span>
+              <input id="signInEmail" type="email" autocomplete="email" inputmode="email" required placeholder="you@example.com">
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input id="signInPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="At least 8 characters">
+            </label>
+            <button class="btn btn--primary" type="submit">Sign in</button>
+          </form>
+          <button class="text-button" id="forgotPasswordBtn" type="button">Forgot your password?</button>
+        </div>
+
+        <div id="signUpPanel" class="auth-panel" role="tabpanel">
+          <span class="kicker">New athlete</span>
+          <h2>Create a simple account</h2>
+          <form id="signUpForm" class="stack-form">
+            <label class="field">
+              <span>Display name <em>optional</em></span>
+              <input id="signUpName" type="text" autocomplete="nickname" maxlength="40" placeholder="e.g. Ahmed">
+            </label>
+            <label class="field">
+              <span>Email</span>
+              <input id="signUpEmail" type="email" autocomplete="email" inputmode="email" required placeholder="you@example.com">
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input id="signUpPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters">
+            </label>
+            <button class="btn btn--primary" type="submit">Create account</button>
+          </form>
+          <p class="fine-print">Email confirmation may be required before the first sign-in, depending on your Supabase settings.</p>
+        </div>
+
+        <div id="resetRequestPanel" class="auth-panel">
+          <button class="back-button" id="resetBackBtn" type="button">← Back to sign in</button>
+          <span class="kicker">Password reset</span>
+          <h2>Send a recovery link</h2>
+          <form id="resetRequestForm" class="stack-form">
+            <label class="field">
+              <span>Email</span>
+              <input id="resetEmail" type="email" autocomplete="email" inputmode="email" required placeholder="you@example.com">
+            </label>
+            <button class="btn btn--primary" type="submit">Email recovery link</button>
+          </form>
+        </div>
+
+        <div id="newPasswordPanel" class="auth-panel">
+          <span class="kicker">Account recovery</span>
+          <h2>Choose a new password</h2>
+          <form id="newPasswordForm" class="stack-form">
+            <label class="field">
+              <span>New password</span>
+              <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters">
+            </label>
+            <button class="btn btn--primary" type="submit">Update password</button>
+          </form>
+        </div>
+
+        <div id="authFeedback" class="feedback hidden" role="status"></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="appShell" class="app-shell hidden">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <button class="brand-lockup brand-lockup--button" id="homeBrandBtn" type="button" aria-label="Go to today">
+          <div class="brand-mark brand-mark--small" aria-hidden="true"><span>P</span></div>
+          <div><strong>Pitcher OS</strong><span id="seasonLabel">Off-season system</span></div>
+        </button>
+        <div class="topbar-actions">
+          <div id="syncStatus" class="sync-status" aria-live="polite"><i></i><span>On device</span></div>
+          <button class="icon-button" id="quickThemeBtn" type="button" aria-label="Toggle light and dark mode">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1Zm0 14a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm9-5a1 1 0 0 1-1 1h-1a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1ZM6 12a1 1 0 0 1-1 1H4a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1Zm11.66-5.66a1 1 0 0 1 0 1.42l-.7.7a1 1 0 1 1-1.42-1.42l.7-.7a1 1 0 0 1 1.42 0ZM8.46 15.54a1 1 0 0 1 0 1.42l-.7.7a1 1 0 1 1-1.42-1.42l.7-.7a1 1 0 0 1 1.42 0Zm9.2 2.12a1 1 0 0 1-1.42 0l-.7-.7a1 1 0 0 1 1.42-1.42l.7.7a1 1 0 0 1 0 1.42ZM8.46 8.46a1 1 0 0 1-1.42 0l-.7-.7a1 1 0 1 1 1.42-1.42l.7.7a1 1 0 0 1 0 1.42ZM12 18a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1Z"/></svg>
+          </button>
+          <button class="avatar-button" id="accountBtn" type="button" aria-label="Open account settings"><span id="avatarInitial">A</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section id="view-today" class="view active" data-view="today">
+        <article class="session-hero">
+          <div class="hero-copy">
+            <div class="hero-label-row">
+              <span class="kicker" id="todayEyebrow">Today’s session</span>
+              <span class="date-pill" id="selectedSessionDate">Wed, 19 Aug</span>
+            </div>
+            <h1 id="todayTitle">Strength B — Lateral</h1>
+            <p id="todayDesc">Lateral force, single-leg control, hamstrings, upper-body strength and trunk control.</p>
+            <div class="hero-actions">
+              <button class="btn btn--primary" id="jumpToWorkout" type="button">Open workout</button>
+              <button class="btn btn--surface" id="resetToday" type="button">Reset session</button>
+            </div>
+          </div>
+          <div class="hero-progress" aria-label="Session progress">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="ring-track" cx="60" cy="60" r="49"></circle>
+              <circle class="ring-fill" id="heroProgressRing" cx="60" cy="60" r="49"></circle>
+            </svg>
+            <div><strong id="heroProgressPercent">0%</strong><span id="heroProgressLabel">not started</span></div>
+          </div>
+        </article>
+
+        <div class="week-strip" id="weekStrip" aria-label="Current training week"></div>
+
+        <div class="section-heading">
+          <div><span class="kicker">Session plan</span><h2>Do the important work well</h2></div>
+          <span class="section-note">Tap for cues</span>
+        </div>
+        <div id="todayWorkout"></div>
+      </section>
+
+      <section id="view-week" class="view" data-view="week">
+        <div class="page-heading">
+          <span class="kicker">Weekly structure</span>
+          <h1>Stable plan. Progressive loading.</h1>
+          <p>The exercises stay recognisable across the off-season. Difficulty and workload change as you adapt.</p>
+        </div>
+        <div class="schedule-grid" id="schedule"></div>
+
+        <article class="principle-card">
+          <span class="kicker">Training order</span>
+          <div class="principle-flow" aria-label="Training order">
+            <span>Move well</span><i>→</i><span>Move fast</span><i>→</i><span>Get strong</span><i>→</i><span>Build muscle</span><i>→</i><span>Stay durable</span>
+          </div>
+          <p>When hard throwing and lifting happen on the same day: <strong>throw first, lift second.</strong></p>
+        </article>
+
+        <div class="section-heading">
+          <div><span class="kicker">Explore</span><h2>Strength and recovery days</h2></div>
+        </div>
+        <div class="week-strip week-strip--compact" id="strengthStrip"></div>
+        <div id="weekWorkout" class="week-workout"></div>
+      </section>
+
+      <section id="view-progress" class="view" data-view="progress">
+        <div class="page-heading page-heading--split">
+          <div><span class="kicker">Progress</span><h1>Measure outputs, not soreness.</h1><p>Use consistent test conditions and check in roughly every four weeks.</p></div>
+          <button class="btn btn--surface btn--small" id="exportProgress" type="button">Export CSV</button>
+        </div>
+
+        <div class="metric-grid" id="progressSummary"></div>
+
+        <article class="panel checkin-panel">
+          <div class="panel-heading">
+            <div><span class="kicker">New check-in</span><h2>Record the useful numbers</h2></div>
+            <span class="panel-hint">All fields optional</span>
+          </div>
+          <form id="progressForm" class="measurement-grid">
+            <label class="field"><span>Date</span><input id="pDate" type="date" required></label>
+            <label class="field"><span>Broad jump <em>cm</em></span><input id="pBroad" type="number" inputmode="decimal" min="0" max="500" step="0.1" placeholder="215"></label>
+            <label class="field"><span>Pull-ups <em>clean reps</em></span><input id="pPull" type="number" inputmode="numeric" min="0" max="100" step="1" placeholder="8"></label>
+            <label class="field"><span>Split squat load <em>total kg</em></span><input id="pSplitLoad" type="number" inputmode="decimal" min="0" max="500" step="0.5" placeholder="25"></label>
+            <label class="field"><span>Split squat <em>reps / leg</em></span><input id="pSplitReps" type="number" inputmode="numeric" min="0" max="100" step="1" placeholder="10"></label>
+            <label class="field"><span>Single-leg target <em>cm</em></span><input id="pSingleHeight" type="number" inputmode="decimal" min="0" max="150" step="0.5" placeholder="45"></label>
+            <label class="field"><span>Single-leg load <em>kg</em></span><input id="pSingleLoad" type="number" inputmode="decimal" min="0" max="500" step="0.5" placeholder="10"></label>
+            <label class="field"><span>Bodyweight <em>kg</em></span><input id="pWeight" type="number" inputmode="decimal" min="20" max="300" step="0.1" placeholder="82.4"></label>
+            <label class="field field--full"><span>Notes <em>optional</em></span><textarea id="pNotes" rows="3" maxlength="500" placeholder="Same shoes, same surface, anything that affected the test..."></textarea></label>
+            <div class="form-actions field--full"><button class="btn btn--primary" type="submit">Save check-in</button></div>
+          </form>
+        </article>
+
+        <article class="panel trend-panel">
+          <div class="panel-heading">
+            <div><span class="kicker">Trend</span><h2>Direction over time</h2></div>
+            <div class="metric-tabs" id="metricTabs" role="tablist" aria-label="Progress chart metric">
+              <button class="active" data-metric="broad_jump_cm" type="button">Jump</button>
+              <button data-metric="pullups" type="button">Pull-ups</button>
+              <button data-metric="bodyweight_kg" type="button">Weight</button>
+            </div>
+          </div>
+          <div id="trendChart" class="trend-chart"></div>
+        </article>
+
+        <div class="two-column-panels">
+          <article class="panel">
+            <div class="panel-heading"><div><span class="kicker">History</span><h2>Check-ins</h2></div></div>
+            <div id="progressList" class="history-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-heading"><div><span class="kicker">Training log</span><h2>Recent sessions</h2></div></div>
+            <div id="sessionHistory" class="history-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-more" class="view" data-view="more">
+        <div class="page-heading">
+          <span class="kicker">Operating rules</span>
+          <h1>Keep the programme honest.</h1>
+          <p>These rules stop limited equipment and rising throwing volume from turning the plan into junk volume.</p>
+        </div>
+        <div id="rulesList" class="rule-grid"></div>
+
+        <div class="section-heading"><div><span class="kicker">Highest-value upgrades</span><h2>Buy capability, not clutter</h2></div></div>
+        <div id="equipmentGrid" class="equipment-grid"></div>
+
+        <article class="panel data-panel">
+          <div>
+            <span class="kicker">Your data</span>
+            <h2 id="dataPanelTitle">Cloud sync enabled</h2>
+            <p id="dataPanelCopy">Workout sessions, preferences and check-ins follow your account. A local cache keeps the app responsive.</p>
+          </div>
+          <div class="data-actions">
+            <button class="btn btn--surface" id="manualSyncBtn" type="button">Sync now</button>
+            <button class="btn btn--surface" id="exportAllBtn" type="button">Export all data</button>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Primary navigation">
+      <button class="nav-button active" data-view-target="today" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1v-8.5Z"/></svg><span>Today</span>
+      </button>
+      <button class="nav-button" data-view-target="week" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v2m10-2v2M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg><span>Plan</span>
+      </button>
+      <button class="nav-button" data-view-target="progress" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V9m7 10V5m7 14v-7M3 21h18"/></svg><span>Progress</span>
+      </button>
+      <button class="nav-button" data-view-target="more" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12a1 1 0 1 0 0 .01V12Zm7 0a1 1 0 1 0 0 .01V12Zm7 0a1 1 0 1 0 0 .01V12Z"/></svg><span>More</span>
+      </button>
+    </nav>
+  </div>
+
+  <div id="accountSheet" class="sheet hidden" aria-hidden="true">
+    <button class="sheet-backdrop" id="closeAccountBackdrop" type="button" aria-label="Close account settings"></button>
+    <section class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="accountTitle">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-heading">
+        <div><span class="kicker">Account</span><h2 id="accountTitle">Settings</h2></div>
+        <button class="icon-button" id="closeAccountBtn" type="button" aria-label="Close account settings">×</button>
+      </div>
+
+      <div class="profile-summary">
+        <div class="avatar-large"><span id="accountInitial">A</span></div>
+        <div><strong id="accountDisplayName">Athlete</strong><span id="accountEmail">Preview mode</span></div>
+      </div>
+
+      <form id="profileForm" class="stack-form">
+        <label class="field"><span>Display name</span><input id="profileName" type="text" maxlength="40" autocomplete="nickname" placeholder="Athlete"></label>
+        <div class="setting-group">
+          <span class="setting-label">Appearance</span>
+          <div class="segmented" id="themeSelector" role="radiogroup" aria-label="Appearance">
+            <button data-theme-choice="light" type="button">Light</button>
+            <button data-theme-choice="dark" type="button">Dark</button>
+            <button data-theme-choice="system" type="button">System</button>
+          </div>
+        </div>
+        <button class="btn btn--primary" id="saveProfileBtn" type="submit">Save settings</button>
+      </form>
+
+      <div class="sheet-divider"></div>
+      <button class="btn btn--danger" id="signOutBtn" type="button">Sign out</button>
+    </section>
+  </div>
+
+  <div id="confirmDialog" class="confirm-dialog hidden" aria-hidden="true">
+    <button class="confirm-backdrop" id="confirmBackdrop" type="button" aria-label="Cancel"></button>
+    <section class="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmCopy">
+      <h2 id="confirmTitle">Reset this session?</h2>
+      <p id="confirmCopy">This clears the checked sets for the selected date.</p>
+      <div class="confirm-actions">
+        <button class="btn btn--surface" id="confirmCancelBtn" type="button">Cancel</button>
+        <button class="btn btn--danger" id="confirmOkBtn" type="button">Reset</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
