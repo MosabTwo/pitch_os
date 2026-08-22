@@ -776,9 +776,12 @@ function bindWeekStrip(container, onSelect) {
 }
 
 function renderToday(dayKey) {
-  const day = dayDefinition(dayKey);
-  const date = dateForDayKeyInCurrentWeek(dayKey);
-  state.selectedTodayKey = dayKey;
+  const days = getActiveDays();
+  // Fall back to first available day if requested key isn't in the active template
+  const validKey = days.find((d) => d.key === dayKey) ? dayKey : (days[0]?.key || 'mon');
+  const day = dayDefinition(validKey);
+  const date = dateForDayKeyInCurrentWeek(validKey);
+  state.selectedTodayKey = validKey;
   state.selectedTodayDate = date;
 
   $('#todayEyebrow').textContent = isToday(date) ? 'Today’s session' : `${day.long} plan`;
@@ -787,23 +790,26 @@ function renderToday(dayKey) {
   $('#todayDesc').textContent = day.desc;
 
   const strip = $('#weekStrip');
-  strip.innerHTML = weekStripHtml(dayKey);
+  strip.innerHTML = weekStripHtml(validKey);
   bindWeekStrip(strip, renderToday);
 
-  renderWorkout('todayWorkout', dayKey, date, 'today');
+  renderWorkout('todayWorkout', validKey, date, 'today');
   updateHeroProgress();
-  ensureSessionLoaded(date, dayKey);
+  ensureSessionLoaded(date, validKey);
 }
 
 function renderWeekWorkout(dayKey) {
-  const date = dateForDayKeyInCurrentWeek(dayKey);
-  state.selectedWeekKey = dayKey;
+  const days = getActiveDays();
+  // Fall back to first available day if requested key isn't in the active template
+  const validKey = days.find((d) => d.key === dayKey) ? dayKey : (days[0]?.key || 'mon');
+  const date = dateForDayKeyInCurrentWeek(validKey);
+  state.selectedWeekKey = validKey;
   state.selectedWeekDate = date;
   const strip = $('#strengthStrip');
-  strip.innerHTML = weekStripHtml(dayKey, { compact: true });
+  strip.innerHTML = weekStripHtml(validKey, { compact: true });
   bindWeekStrip(strip, renderWeekWorkout);
-  renderWorkout('weekWorkout', dayKey, date, 'week');
-  ensureSessionLoaded(date, dayKey);
+  renderWorkout('weekWorkout', validKey, date, 'week');
+  ensureSessionLoaded(date, validKey);
 }
 
 function renderWorkout(targetId, dayKey, date, context) {
@@ -1420,6 +1426,25 @@ function setActiveTemplateId(id) {
   localStorage.setItem(activeTemplateStorageKey(), id);
   const schedule = $('#schedule');
   if (schedule) delete schedule.dataset.rendered;
+
+  // Reset selected days to valid keys for the new template
+  const days = getActiveDaysForId(id);
+  const validKeys = days.map((d) => d.key);
+  if (!validKeys.includes(state.selectedTodayKey)) {
+    state.selectedTodayKey = validKeys[0] || 'mon';
+    state.selectedTodayDate = dateForDayKeyInCurrentWeek(state.selectedTodayKey);
+  }
+  if (!validKeys.includes(state.selectedWeekKey)) {
+    state.selectedWeekKey = validKeys[0] || 'mon';
+    state.selectedWeekDate = dateForDayKeyInCurrentWeek(state.selectedWeekKey);
+  }
+}
+
+// Helper used before state.activeTemplateId is updated (in setActiveTemplateId itself)
+function getActiveDaysForId(id) {
+  if (id === 'builtin') return DAYS;
+  const template = state.templates.find((t) => t.id === id);
+  return template?.days || DAYS;
 }
 
 function getActiveDays() {
