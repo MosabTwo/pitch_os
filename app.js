@@ -30,7 +30,9 @@ const state = {
   flushTimer: null,
   isFlushing: false,
   currentUserId: null,
-  confirmAction: null
+  confirmAction: null,
+  templates: [],
+  activeTemplateId: 'builtin'
 };
 
 function escapeHtml(value) {
@@ -101,7 +103,7 @@ function currentWeekRange() {
 
 function isToday(iso) { return iso === localIsoDate(new Date()); }
 
-function dayDefinition(dayKey) { return DAYS.find((day) => day.key === dayKey); }
+function dayDefinition(dayKey) { return getActiveDays().find((day) => day.key === dayKey); }
 
 function setBusy(button, busy, label = 'Working…') {
   if (!button) return;
@@ -325,6 +327,7 @@ async function enterCloudApp(session) {
     migrateLegacyLocalData();
     state.progressEntries = readLocalProgress();
     state.recentSessions = readLocalRecentSessions();
+    loadTemplates();
   }
   await loadProfile();
   updateAccountUi();
@@ -351,6 +354,7 @@ function enterPreviewMode() {
   migrateLegacyLocalData();
   state.progressEntries = readLocalProgress();
   state.recentSessions = readLocalRecentSessions();
+  loadTemplates();
   updateAccountUi();
   showOnlyScreen('appShell');
   renderApp();
@@ -670,7 +674,7 @@ async function saveProfileSettings() {
 }
 
 function totalSetsForWorkout(dayKey) {
-  return (WORKOUTS[dayKey]?.exercises || []).reduce((sum, exercise) => sum + Number(exercise.sets || 0), 0);
+  return (getActiveWorkouts()[dayKey]?.exercises || []).reduce((sum, exercise) => sum + Number(exercise.sets || 0), 0);
 }
 
 function completedSetCount(record) {
@@ -703,13 +707,14 @@ function navTo(view, { scroll = true } = {}) {
   $$('.view').forEach((node) => node.classList.toggle('active', node.dataset.view === safeView));
   $$('.nav-button').forEach((button) => button.classList.toggle('active', button.dataset.viewTarget === safeView));
   if (safeView === 'progress') renderProgress();
+  if (safeView === 'more') renderTemplates();
   if (scroll) window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function renderStaticContent() {
   const schedule = $('#schedule');
   if (!schedule.dataset.rendered) {
-    schedule.innerHTML = DAYS.map((day) => `
+    schedule.innerHTML = getActiveDays().map((day) => `
       <article class="schedule-row">
         <div class="schedule-day">${escapeHtml(day.short)}</div>
         <div><strong>${escapeHtml(day.title)}</strong><p>${escapeHtml(day.desc)}</p></div>
@@ -733,7 +738,9 @@ function renderStaticContent() {
 }
 
 function weekStripHtml(activeKey, { compact = false } = {}) {
-  const days = compact ? DAYS.filter((day) => ['mon', 'wed', 'thu', 'fri'].includes(day.key)) : DAYS;
+  const activeDays = getActiveDays();
+  const activeWorkouts = getActiveWorkouts();
+  const days = compact ? activeDays.filter((day) => activeWorkouts[day.key]) : activeDays;
   return days.map((day) => {
     const date = dateForDayKeyInCurrentWeek(day.key);
     const record = getSessionRecord(date, day.key);
@@ -794,7 +801,7 @@ function renderWorkout(targetId, dayKey, date, context) {
   const warmupWasOpen = Boolean($('details.warmup-card[open]', target));
 
   const day = dayDefinition(dayKey);
-  const workout = WORKOUTS[dayKey];
+  const workout = getActiveWorkouts()[dayKey];
   const record = getSessionRecord(date, dayKey);
 
   if (!workout) {
@@ -1374,6 +1381,272 @@ function downloadBlob(content, filename, type) {
   URL.revokeObjectURL(url);
 }
 
+// ── Workout template system ───────────────────────────────────────────────────
+
+function templateStorageKey() { return storageKey('templates'); }
+function activeTemplateStorageKey() { return storageKey('active-template'); }
+
+function readLocalTemplates() {
+  const data = safeJsonParse(localStorage.getItem(templateStorageKey()), []);
+  return Array.isArray(data) ? data : [];
+}
+
+function writeLocalTemplates(templates) {
+  state.templates = templates;
+  localStorage.setItem(templateStorageKey(), JSON.stringify(templates));
+}
+
+function getActiveTemplateId() {
+  return localStorage.getItem(activeTemplateStorageKey()) || 'builtin';
+}
+
+function setActiveTemplateId(id) {
+  state.activeTemplateId = id;
+  localStorage.setItem(activeTemplateStorageKey(), id);
+  const schedule = $('#schedule');
+  if (schedule) delete schedule.dataset.rendered;
+}
+
+function getActiveDays() {
+  if (state.activeTemplateId === 'builtin') return DAYS;
+  const template = state.templates.find((t) => t.id === state.activeTemplateId);
+  return template?.days || DAYS;
+}
+
+function getActiveWorkouts() {
+  if (state.activeTemplateId === 'builtin') return WORKOUTS;
+  const template = state.templates.find((t) => t.id === state.activeTemplateId);
+  return template?.workouts || WORKOUTS;
+}
+
+function loadTemplates() {
+  state.templates = readLocalTemplates();
+  state.activeTemplateId = getActiveTemplateId();
+}
+
+// ── CSV helpers ───────────────────────────────────────────────────────────────
+
+const TEMPLATE_CSV_HEADERS = [
+  'program_name', 'program_description',
+  'day_key', 'day_short', 'day_long', 'day_title', 'day_kind', 'day_desc',
+  'workout_title', 'workout_badge', 'workout_subtitle', 'warmup',
+  'exercise_order', 'exercise_name', 'exercise_volume', 'exercise_rest',
+  'exercise_sets', 'exercise_cue', 'exercise_note'
+];
+
+function parseCsvLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+      else if (ch === '"') inQuotes = false;
+      else current += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === ',') { result.push(current); current = ''; }
+      else current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function parseTemplateCsv(csvText) {
+  const lines = csvText.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
+  const headers = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+  const col = (row, name) => {
+    const index = headers.indexOf(name);
+    return index >= 0 ? (row[index] ?? '').trim() : '';
+  };
+
+  const rows = lines.slice(1).map((line) => parseCsvLine(line));
+  const programName = col(rows[0], 'program_name') || 'Imported Program';
+  const programDesc = col(rows[0], 'program_description') || '';
+  const dayOrder = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const dayMap = new Map();
+  const workoutsMap = {};
+
+  rows.forEach((row) => {
+    const dayKey = col(row, 'day_key').toLowerCase();
+    if (!dayKey) return;
+    if (!dayMap.has(dayKey)) {
+      dayMap.set(dayKey, {
+        key: dayKey,
+        short: col(row, 'day_short') || (dayKey.charAt(0).toUpperCase() + dayKey.slice(1)),
+        long: col(row, 'day_long') || dayKey,
+        title: col(row, 'day_title') || dayKey,
+        kind: col(row, 'day_kind') || 'Strength',
+        desc: col(row, 'day_desc') || ''
+      });
+    }
+    const exerciseName = col(row, 'exercise_name');
+    if (!exerciseName) return;
+    if (!workoutsMap[dayKey]) {
+      workoutsMap[dayKey] = {
+        title: col(row, 'workout_title') || dayKey,
+        badge: col(row, 'workout_badge') || '',
+        subtitle: col(row, 'workout_subtitle') || '',
+        warmup: col(row, 'warmup').toLowerCase() === 'true',
+        exercises: []
+      };
+    }
+    workoutsMap[dayKey].exercises.push({
+      name: exerciseName,
+      volume: col(row, 'exercise_volume') || '',
+      rest: col(row, 'exercise_rest') || '60 sec',
+      sets: Number(col(row, 'exercise_sets')) || 0,
+      cue: col(row, 'exercise_cue') || '',
+      note: col(row, 'exercise_note') || ''
+    });
+  });
+
+  const days = [...dayMap.values()].sort((a, b) => {
+    const ai = dayOrder.indexOf(a.key);
+    const bi = dayOrder.indexOf(b.key);
+    return (ai >= 0 ? ai : 99) - (bi >= 0 ? bi : 99);
+  });
+
+  return { id: makeUuid(), name: programName, description: programDesc, created_at: new Date().toISOString(), days, workouts: workoutsMap };
+}
+
+function exportTemplateCsv(templateOrBuiltin) {
+  const isBuiltin = templateOrBuiltin === 'builtin';
+  const days = isBuiltin ? DAYS : templateOrBuiltin.days;
+  const workouts = isBuiltin ? WORKOUTS : templateOrBuiltin.workouts;
+  const name = isBuiltin ? 'Pitcher Off-season' : templateOrBuiltin.name;
+  const desc = isBuiltin ? 'Built-in pitcher off-season strength program' : (templateOrBuiltin.description || '');
+
+  const headerRow = TEMPLATE_CSV_HEADERS.map(csvEscape).join(',');
+  const dataRows = [];
+
+  days.forEach((day) => {
+    const workout = workouts[day.key];
+    const baseDay = [name, desc, day.key, day.short, day.long, day.title, day.kind, day.desc];
+    if (!workout) {
+      dataRows.push([...baseDay, '', '', '', '', '', '', '', '', ''].map(csvEscape).join(','));
+      return;
+    }
+    const baseWorkout = [workout.title, workout.badge, workout.subtitle, workout.warmup ? 'true' : 'false'];
+    if (!workout.exercises || !workout.exercises.length) {
+      dataRows.push([...baseDay, ...baseWorkout, '', '', '', '', '', ''].map(csvEscape).join(','));
+      return;
+    }
+    workout.exercises.forEach((exercise, index) => {
+      dataRows.push([
+        ...baseDay, ...baseWorkout,
+        index + 1, exercise.name, exercise.volume, exercise.rest,
+        exercise.sets, exercise.cue, exercise.note || ''
+      ].map(csvEscape).join(','));
+    });
+  });
+
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+  downloadBlob([headerRow, ...dataRows].join('\n'), `pitcher-os-template-${slug}.csv`, 'text/csv');
+}
+
+function downloadBlankTemplate() {
+  const headerRow = TEMPLATE_CSV_HEADERS.map(csvEscape).join(',');
+  const exampleRows = [
+    ['My Program', 'Description of my program', 'mon', 'Mon', 'Monday', 'Day 1 — Strength', 'Strength', 'Main strength day', 'Monday Strength', 'Force', '60–75 min', 'true', '1', 'Back Squat', '4 × 5', '3 min', '4', 'Brace the core and sit back into the squat', 'Add weight each week'],
+    ['My Program', 'Description of my program', 'mon', 'Mon', 'Monday', 'Day 1 — Strength', 'Strength', 'Main strength day', 'Monday Strength', 'Force', '60–75 min', 'true', '2', 'Bench Press', '4 × 8', '2 min', '4', 'Keep shoulder blades pinched', ''],
+    ['My Program', 'Description of my program', 'tue', 'Tue', 'Tuesday', 'Active Recovery', 'Recover', 'Light movement day', '', '', '', '', '', '', '', '', '', '', ''],
+    ['My Program', 'Description of my program', 'wed', 'Wed', 'Wednesday', 'Day 2 — Power', 'Strength', 'Explosive work', 'Wednesday Power', 'Power', '45–60 min', 'false', '1', 'Box Jump', '4 × 3', '90 sec', '4', 'Land quietly and absorb the force', 'Focus on quality not speed']
+  ].map((row) => row.map(csvEscape).join(','));
+
+  downloadBlob([headerRow, ...exampleRows].join('\n'), 'pitcher-os-template-BLANK.csv', 'text/csv');
+}
+
+function handleCsvImport(file) {
+  if (!file || !file.name.toLowerCase().endsWith('.csv')) {
+    showToast('Please select a .csv file');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const template = parseTemplateCsv(event.target.result);
+      const existing = readLocalTemplates();
+      writeLocalTemplates([...existing, template]);
+      setActiveTemplateId(template.id);
+      renderApp();
+      renderTemplates();
+      showToast(`"${template.name}" imported and activated`);
+    } catch (error) {
+      showToast(`Import failed: ${error.message}`);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderTemplates() {
+  const container = $('#templateList');
+  if (!container) return;
+  const templates = readLocalTemplates();
+  const allTemplates = [
+    { id: 'builtin', name: 'Pitcher Off-season', description: 'Built-in pitcher off-season strength program', builtIn: true },
+    ...templates
+  ];
+
+  container.innerHTML = allTemplates.map((t) => {
+    const isActive = state.activeTemplateId === t.id;
+    return `
+      <article class="template-card${isActive ? ' template-card--active' : ''}">
+        <div class="template-card-body">
+          <strong>${escapeHtml(t.name)}</strong>
+          ${t.description ? `<p>${escapeHtml(t.description)}</p>` : ''}
+          ${isActive ? `<span class="badge">Active</span>` : ''}
+        </div>
+        <div class="template-card-actions">
+          <button class="btn btn--surface btn--small" data-export-template="${escapeHtml(t.id)}" type="button">Export CSV</button>
+          ${!isActive ? `<button class="btn btn--primary btn--small" data-activate-template="${escapeHtml(t.id)}" type="button">Use</button>` : ''}
+          ${!t.builtIn ? `<button class="btn btn--danger btn--small" data-delete-template="${escapeHtml(t.id)}" type="button">Delete</button>` : ''}
+        </div>
+      </article>`;
+  }).join('');
+
+  $$('[data-export-template]', container).forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.exportTemplate;
+      const tpl = id === 'builtin' ? 'builtin' : state.templates.find((t) => t.id === id);
+      if (tpl !== undefined) exportTemplateCsv(tpl);
+    });
+  });
+
+  $$('[data-activate-template]', container).forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setActiveTemplateId(btn.dataset.activateTemplate);
+      state.templates = readLocalTemplates();
+      renderApp();
+      renderTemplates();
+      showToast('Template activated');
+    });
+  });
+
+  $$('[data-delete-template]', container).forEach((btn) => {
+    btn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Delete this template?',
+        copy: 'This removes the custom program from your device.',
+        confirmLabel: 'Delete',
+        action: () => {
+          const id = btn.dataset.deleteTemplate;
+          writeLocalTemplates(state.templates.filter((t) => t.id !== id));
+          if (state.activeTemplateId === id) {
+            setActiveTemplateId('builtin');
+            renderApp();
+          }
+          renderTemplates();
+          showToast('Template deleted');
+        }
+      });
+    });
+  });
+}
+
 function openAccountSheet() {
   updateAccountUi();
   const sheet = $('#accountSheet');
@@ -1551,6 +1824,16 @@ function bindGlobalEvents() {
 
   $('#exportProgress').addEventListener('click', exportProgressCsv);
   $('#exportAllBtn').addEventListener('click', exportAllData);
+
+  // Template import / export
+  const templateCsvInput = $('#templateCsvInput');
+  $('#importTemplateBtn').addEventListener('click', () => templateCsvInput.click());
+  templateCsvInput.addEventListener('change', () => {
+    if (templateCsvInput.files[0]) handleCsvImport(templateCsvInput.files[0]);
+    templateCsvInput.value = '';
+  });
+  $('#downloadBlankTemplateBtn').addEventListener('click', downloadBlankTemplate);
+
   $('#manualSyncBtn').addEventListener('click', async () => {
     if (state.mode !== 'cloud') {
       showToast('Preview data is already saved on this device');
