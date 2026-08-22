@@ -193,7 +193,7 @@ create policy "program_templates_admin_insert"
 on public.program_templates for insert
 to authenticated
 with check (
-  (select email from auth.users where id = auth.uid()) = 'mossab1@gmail.com'
+  (auth.jwt() ->> 'email') = 'mossab1@gmail.com'
 );
 
 drop policy if exists "program_templates_admin_update" on public.program_templates;
@@ -201,7 +201,7 @@ create policy "program_templates_admin_update"
 on public.program_templates for update
 to authenticated
 using (
-  (select email from auth.users where id = auth.uid()) = 'mossab1@gmail.com'
+  (auth.jwt() ->> 'email') = 'mossab1@gmail.com'
 );
 
 drop policy if exists "program_templates_admin_delete" on public.program_templates;
@@ -209,7 +209,7 @@ create policy "program_templates_admin_delete"
 on public.program_templates for delete
 to authenticated
 using (
-  (select email from auth.users where id = auth.uid()) = 'mossab1@gmail.com'
+  (auth.jwt() ->> 'email') = 'mossab1@gmail.com'
 );
 
 commit;
