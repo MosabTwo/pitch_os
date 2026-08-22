@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pitcher-os-v3.2.0';
+const CACHE_NAME = 'pitcher-os-v3.3.0';
 
 // Files that should be cached for offline use
 const PRECACHE = [

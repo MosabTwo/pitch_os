@@ -289,12 +289,12 @@
 
         <div class="section-heading" style="margin-top:40px">
           <div><span class="kicker">Workout Templates</span><h2>Switch programs anytime</h2></div>
-          <div class="template-toolbar">
+          <div class="template-toolbar" id="adminTemplateToolbar" style="display:none">
             <button class="btn btn--quiet btn--small" id="downloadBlankTemplateBtn" type="button">Download blank CSV</button>
             <button class="btn btn--primary btn--small" id="importTemplateBtn" type="button">Import CSV</button>
           </div>
         </div>
-        <p class="template-hint">Import a filled-in CSV to create a new program (Pitching, Catching, Generic, etc.). Export any template to edit and re-import it.</p>
+        <p class="template-hint" id="templateHint">Programs are managed by the admin and available to everyone.</p>
         <div id="templateList" class="template-list"></div>
         <input type="file" id="templateCsvInput" accept=".csv" style="display:none" aria-hidden="true">
 

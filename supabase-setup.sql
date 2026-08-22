@@ -157,4 +157,59 @@ on public.progress_entries for delete
 to authenticated
 using ((select auth.uid()) = user_id);
 
+-- ── Program templates (admin-uploaded, globally visible) ─────────────────────
+
+create table if not exists public.program_templates (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(name) <= 60),
+  description text not null default '' check (char_length(description) <= 300),
+  days jsonb not null default '[]'::jsonb,
+  workouts jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists program_templates_set_updated_at on public.program_templates;
+create trigger program_templates_set_updated_at
+before update on public.program_templates
+for each row execute function public.set_updated_at();
+
+alter table public.program_templates enable row level security;
+
+-- All authenticated users can read templates
+grant select on table public.program_templates to authenticated;
+-- Only the service role (used by admin via client with admin email check) can write
+-- We enforce admin-only writes via a policy that checks a hard-coded email
+grant insert, update, delete on table public.program_templates to authenticated;
+
+drop policy if exists "program_templates_select_all" on public.program_templates;
+create policy "program_templates_select_all"
+on public.program_templates for select
+to authenticated
+using (true);
+
+drop policy if exists "program_templates_admin_insert" on public.program_templates;
+create policy "program_templates_admin_insert"
+on public.program_templates for insert
+to authenticated
+with check (
+  (select email from auth.users where id = auth.uid()) = 'mossab1@gmail.com'
+);
+
+drop policy if exists "program_templates_admin_update" on public.program_templates;
+create policy "program_templates_admin_update"
+on public.program_templates for update
+to authenticated
+using (
+  (select email from auth.users where id = auth.uid()) = 'mossab1@gmail.com'
+);
+
+drop policy if exists "program_templates_admin_delete" on public.program_templates;
+create policy "program_templates_admin_delete"
+on public.program_templates for delete
+to authenticated
+using (
+  (select email from auth.users where id = auth.uid()) = 'mossab1@gmail.com'
+);
+
 commit;

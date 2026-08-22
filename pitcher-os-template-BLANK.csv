@@ -1,0 +1,5 @@
+"program_name","program_description","day_key","day_short","day_long","day_title","day_kind","day_desc","workout_title","workout_badge","workout_subtitle","warmup","exercise_order","exercise_name","exercise_volume","exercise_rest","exercise_sets","exercise_cue","exercise_note"
+"My Program","Description of my program","mon","Mon","Monday","Day 1 — Strength","Strength","Main strength day","Monday Strength","Force","60–75 min","true","1","Back Squat","4 × 5","3 min","4","Brace the core and sit back into the squat","Add weight each week"
+"My Program","Description of my program","mon","Mon","Monday","Day 1 — Strength","Strength","Main strength day","Monday Strength","Force","60–75 min","true","2","Bench Press","4 × 8","2 min","4","Keep shoulder blades pinched",""
+"My Program","Description of my program","tue","Tue","Tuesday","Active Recovery","Recover","Light movement day","","","","","","","","","","",""
+"My Program","Description of my program","wed","Wed","Wednesday","Day 2 — Power","Strength","Explosive work","Wednesday Power","Power","45–60 min","false","1","Box Jump","4 × 3","90 sec","4","Land quietly and absorb the force","Focus on quality not speed"

@@ -343,7 +343,8 @@ async function enterCloudApp(session) {
   await Promise.allSettled([
     loadWeekSessionsFromCloud(),
     loadProgressFromCloud(),
-    loadRecentSessionsFromCloud()
+    loadRecentSessionsFromCloud(),
+    loadTemplatesFromCloud()
   ]);
   ensureSessionLoaded(state.selectedTodayDate, state.selectedTodayKey);
   ensureSessionLoaded(state.selectedWeekDate, state.selectedWeekKey);
@@ -1404,17 +1405,18 @@ function downloadBlob(content, filename, type) {
 
 // ── Workout template system ───────────────────────────────────────────────────
 
-function templateStorageKey() { return storageKey('templates'); }
+// Templates are global (not user-scoped) — admin publishes, everyone sees them
+const GLOBAL_TEMPLATES_KEY = `${STORAGE_PREFIX}:global-templates`;
 function activeTemplateStorageKey() { return storageKey('active-template'); }
 
 function readLocalTemplates() {
-  const data = safeJsonParse(localStorage.getItem(templateStorageKey()), []);
+  const data = safeJsonParse(localStorage.getItem(GLOBAL_TEMPLATES_KEY), []);
   return Array.isArray(data) ? data : [];
 }
 
 function writeLocalTemplates(templates) {
   state.templates = templates;
-  localStorage.setItem(templateStorageKey(), JSON.stringify(templates));
+  localStorage.setItem(GLOBAL_TEMPLATES_KEY, JSON.stringify(templates));
 }
 
 function getActiveTemplateId() {
@@ -1462,6 +1464,53 @@ function getActiveWorkouts() {
 function loadTemplates() {
   state.templates = readLocalTemplates();
   state.activeTemplateId = getActiveTemplateId();
+}
+
+async function loadTemplatesFromCloud() {
+  if (state.mode !== 'cloud' || !state.supabase) return;
+  try {
+    const { data, error } = await state.supabase
+      .from('program_templates')
+      .select('id, name, description, days, workouts, created_at, updated_at')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    if (data && data.length > 0) {
+      writeLocalTemplates(data);
+      // If the currently active template was deleted from cloud, reset to builtin
+      const validIds = ['builtin', ...data.map((t) => t.id)];
+      if (!validIds.includes(state.activeTemplateId)) setActiveTemplateId('builtin');
+      renderTemplates();
+      // Refresh program selector in profile sheet if open
+      const group = $('#programSelectorGroup');
+      if (group && group.style.display !== 'none') openAccountSheet();
+    }
+  } catch (error) {
+    console.warn('Could not load templates from cloud', error);
+  }
+}
+
+async function saveTemplateToCloud(template) {
+  if (state.mode !== 'cloud' || !state.supabase) return;
+  const { error } = await state.supabase
+    .from('program_templates')
+    .upsert({
+      id: template.id,
+      name: template.name,
+      description: template.description || '',
+      days: template.days,
+      workouts: template.workouts,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'id' });
+  if (error) throw error;
+}
+
+async function deleteTemplateFromCloud(id) {
+  if (state.mode !== 'cloud' || !state.supabase) return;
+  const { error } = await state.supabase
+    .from('program_templates')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
 }
 
 // ── CSV helpers ───────────────────────────────────────────────────────────────
@@ -1606,15 +1655,22 @@ function handleCsvImport(file) {
     return;
   }
   const reader = new FileReader();
-  reader.onload = (event) => {
+  reader.onload = async (event) => {
     try {
       const template = parseTemplateCsv(event.target.result);
-      const existing = readLocalTemplates();
-      writeLocalTemplates([...existing, template]);
+      // Save to cloud first (admin only — RLS enforced server-side too)
+      if (state.mode === 'cloud') {
+        await saveTemplateToCloud(template);
+        // Re-fetch from cloud so all users get it
+        await loadTemplatesFromCloud();
+      } else {
+        const existing = readLocalTemplates();
+        writeLocalTemplates([...existing, template]);
+      }
       setActiveTemplateId(template.id);
       renderApp();
       renderTemplates();
-      showToast(`"${template.name}" imported and activated`);
+      showToast(`"${template.name}" imported — available to all users`);
     } catch (error) {
       showToast(`Import failed: ${error.message}`);
     }
@@ -1631,6 +1687,15 @@ function renderTemplates() {
     ...templates
   ];
 
+  // Show admin toolbar only to admin
+  const showAdminControls = isAdmin();
+  const toolbar = $('#adminTemplateToolbar');
+  if (toolbar) toolbar.style.display = showAdminControls ? '' : 'none';
+  const hint = $('#templateHint');
+  if (hint) hint.textContent = showAdminControls
+    ? 'Import a filled-in CSV to publish a program to all users. Export any template to edit and re-import.'
+    : 'Programs are managed by the admin and available to everyone. Use your profile to switch between them.';
+
   container.innerHTML = allTemplates.map((t) => {
     const isActive = state.activeTemplateId === t.id;
     return `
@@ -1641,9 +1706,9 @@ function renderTemplates() {
           ${isActive ? `<span class="badge">Active</span>` : ''}
         </div>
         <div class="template-card-actions">
-          <button class="btn btn--surface btn--small" data-export-template="${escapeHtml(t.id)}" type="button">Export CSV</button>
+          ${showAdminControls ? `<button class="btn btn--surface btn--small" data-export-template="${escapeHtml(t.id)}" type="button">Export CSV</button>` : ''}
           ${!isActive ? `<button class="btn btn--primary btn--small" data-activate-template="${escapeHtml(t.id)}" type="button">Use</button>` : ''}
-          ${!t.builtIn ? `<button class="btn btn--danger btn--small" data-delete-template="${escapeHtml(t.id)}" type="button">Delete</button>` : ''}
+          ${showAdminControls && !t.builtIn ? `<button class="btn btn--danger btn--small" data-delete-template="${escapeHtml(t.id)}" type="button">Delete</button>` : ''}
         </div>
       </article>`;
   }).join('');
@@ -1670,17 +1735,23 @@ function renderTemplates() {
     btn.addEventListener('click', () => {
       openConfirm({
         title: 'Delete this template?',
-        copy: 'This removes the custom program from your device.',
+        copy: 'This removes the program for all users.',
         confirmLabel: 'Delete',
-        action: () => {
+        action: async () => {
           const id = btn.dataset.deleteTemplate;
+          try {
+            await deleteTemplateFromCloud(id);
+          } catch (error) {
+            showToast(`Delete failed: ${error.message}`);
+            return;
+          }
           writeLocalTemplates(state.templates.filter((t) => t.id !== id));
           if (state.activeTemplateId === id) {
             setActiveTemplateId('builtin');
             renderApp();
           }
           renderTemplates();
-          showToast('Template deleted');
+          showToast('Template deleted for all users');
         }
       });
     });
@@ -1711,14 +1782,14 @@ function closeExportNameDialog() {
 function openAccountSheet() {
   updateAccountUi();
 
-  // Program selector — admin only
+  // Program selector — visible to all users when templates exist
   const group = $('#programSelectorGroup');
   const select = $('#programSelect');
-  if (isAdmin()) {
-    const allTemplates = [
-      { id: 'builtin', name: 'Pitcher Off-season (built-in)' },
-      ...readLocalTemplates()
-    ];
+  const allTemplates = [
+    { id: 'builtin', name: 'Pitcher Off-season (built-in)' },
+    ...readLocalTemplates()
+  ];
+  if (allTemplates.length > 1) {
     select.innerHTML = allTemplates.map((t) =>
       `<option value="${escapeHtml(t.id)}"${t.id === state.activeTemplateId ? ' selected' : ''}>${escapeHtml(t.name)}</option>`
     ).join('');
