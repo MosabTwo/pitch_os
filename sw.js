@@ -1,24 +1,34 @@
 const CACHE_NAME = 'pitcher-os-v3.2.0';
-const APP_SHELL = [
+
+// Files that should be cached for offline use
+const PRECACHE = [
   './',
   './index.html',
-  './styles.css',
-  './app.js',
-  './program-data.js',
-  './config.js',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png'
 ];
 
+// These files are always fetched from the network first, cached as fallback
+const NETWORK_FIRST = [
+  '/app.js',
+  '/styles.css',
+  '/program-data.js',
+  '/config.js'
+];
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE))
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+    )
   );
   self.clients.claim();
 });
@@ -30,6 +40,24 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Network-first for core app files — always get latest, fall back to cache
+  const isNetworkFirst = NETWORK_FIRST.some((path) => url.pathname.endsWith(path));
+  if (isNetworkFirst) {
+    event.respondWith(
+      fetch(request, { cache: 'no-cache' })
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Navigate requests — network first, fall back to cached index
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -43,31 +71,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname.endsWith('/config.js')) {
-    event.respondWith(
-      fetch(request, { cache: 'no-store' })
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          return response;
-        })
-        .catch(() => caches.match(request))
-    );
-    return;
-  }
-
+  // Cache-first for everything else (icons, manifest)
   event.respondWith(
     caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
+      if (cached) return cached;
+      return fetch(request).then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      });
     })
   );
 });

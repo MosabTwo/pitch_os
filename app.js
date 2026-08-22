@@ -1983,10 +1983,24 @@ async function init() {
   $('#pDate').value = localIsoDate(new Date());
   $('#seasonLabel').textContent = 'September–April';
   $('#heroProgressRing').style.strokeDasharray = String(RING_CIRCUMFERENCE);
-  await initializeBackend();
+
+  // Safety net: if init takes more than 8 seconds, force show setup screen
+  const bootTimeout = setTimeout(() => {
+    if (document.getElementById('bootScreen') && !document.getElementById('bootScreen').classList.contains('hidden')) {
+      console.warn('Boot timeout — forcing setup screen');
+      showOnlyScreen('setupScreen');
+      state.mode = 'setup';
+    }
+  }, 8000);
+
+  try {
+    await initializeBackend();
+  } finally {
+    clearTimeout(bootTimeout);
+  }
 
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch((error) => console.warn('Service worker unavailable', error)));
+    navigator.serviceWorker.register('./sw.js').catch((error) => console.warn('Service worker unavailable', error));
   }
 }
 
