@@ -1491,17 +1491,30 @@ async function loadTemplatesFromCloud() {
 
 async function saveTemplateToCloud(template) {
   if (state.mode !== 'cloud' || !state.supabase) return;
-  const { error } = await state.supabase
+  const payload = {
+    id: template.id,
+    name: template.name,
+    description: template.description || '',
+    days: template.days,
+    workouts: template.workouts,
+    updated_at: new Date().toISOString()
+  };
+  // Try insert first; if the id already exists, fall back to update
+  const { error: insertError } = await state.supabase
     .from('program_templates')
-    .upsert({
-      id: template.id,
-      name: template.name,
-      description: template.description || '',
-      days: template.days,
-      workouts: template.workouts,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'id' });
-  if (error) throw error;
+    .insert(payload);
+  if (insertError) {
+    if (insertError.code === '23505') {
+      // Duplicate — update instead
+      const { error: updateError } = await state.supabase
+        .from('program_templates')
+        .update({ name: payload.name, description: payload.description, days: payload.days, workouts: payload.workouts, updated_at: payload.updated_at })
+        .eq('id', payload.id);
+      if (updateError) throw updateError;
+    } else {
+      throw insertError;
+    }
+  }
 }
 
 async function deleteTemplateFromCloud(id) {
