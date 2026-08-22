@@ -1543,63 +1543,82 @@ function parseCsvLine(line) {
   return result;
 }
 
+// Returns an array of templates — one per unique program_name in the CSV
 function parseTemplateCsv(csvText) {
   const lines = csvText.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
-  const headers = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+
+  // Strip UTF-8 BOM if present
+  const firstLine = lines[0].replace(/^\uFEFF/, '');
+  const headers = parseCsvLine(firstLine).map((h) => h.trim().toLowerCase().replace(/^\uFEFF/, ''));
   const col = (row, name) => {
     const index = headers.indexOf(name);
     return index >= 0 ? (row[index] ?? '').trim() : '';
   };
 
   const rows = lines.slice(1).map((line) => parseCsvLine(line));
-  const programName = col(rows[0], 'program_name') || 'Imported Program';
-  const programDesc = col(rows[0], 'program_description') || '';
   const dayOrder = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-  const dayMap = new Map();
-  const workoutsMap = {};
 
+  // Group rows by program_name so one CSV can contain multiple programs
+  const programGroups = new Map();
   rows.forEach((row) => {
-    const dayKey = col(row, 'day_key').toLowerCase();
-    if (!dayKey) return;
-    if (!dayMap.has(dayKey)) {
-      dayMap.set(dayKey, {
-        key: dayKey,
-        short: col(row, 'day_short') || (dayKey.charAt(0).toUpperCase() + dayKey.slice(1)),
-        long: col(row, 'day_long') || dayKey,
-        title: col(row, 'day_title') || dayKey,
-        kind: col(row, 'day_kind') || 'Strength',
-        desc: col(row, 'day_desc') || ''
+    const programName = col(row, 'program_name') || 'Imported Program';
+    if (!programGroups.has(programName)) programGroups.set(programName, []);
+    programGroups.get(programName).push(row);
+  });
+
+  const templates = [];
+
+  for (const [programName, programRows] of programGroups) {
+    const programDesc = col(programRows[0], 'program_description') || '';
+    const dayMap = new Map();
+    const workoutsMap = {};
+
+    programRows.forEach((row) => {
+      const dayKey = col(row, 'day_key').toLowerCase();
+      if (!dayKey) return;
+      if (!dayMap.has(dayKey)) {
+        dayMap.set(dayKey, {
+          key: dayKey,
+          short: col(row, 'day_short') || (dayKey.charAt(0).toUpperCase() + dayKey.slice(1)),
+          long: col(row, 'day_long') || dayKey,
+          title: col(row, 'day_title') || dayKey,
+          kind: col(row, 'day_kind') || 'Strength',
+          desc: col(row, 'day_desc') || ''
+        });
+      }
+      const exerciseName = col(row, 'exercise_name');
+      if (!exerciseName) return;
+      if (!workoutsMap[dayKey]) {
+        workoutsMap[dayKey] = {
+          title: col(row, 'workout_title') || dayKey,
+          badge: col(row, 'workout_badge') || '',
+          subtitle: col(row, 'workout_subtitle') || '',
+          warmup: col(row, 'warmup').toLowerCase() === 'true',
+          exercises: []
+        };
+      }
+      workoutsMap[dayKey].exercises.push({
+        name: exerciseName,
+        volume: col(row, 'exercise_volume') || '',
+        rest: col(row, 'exercise_rest') || '60 sec',
+        sets: Number(col(row, 'exercise_sets')) || 0,
+        cue: col(row, 'exercise_cue') || '',
+        note: col(row, 'exercise_note') || ''
       });
-    }
-    const exerciseName = col(row, 'exercise_name');
-    if (!exerciseName) return;
-    if (!workoutsMap[dayKey]) {
-      workoutsMap[dayKey] = {
-        title: col(row, 'workout_title') || dayKey,
-        badge: col(row, 'workout_badge') || '',
-        subtitle: col(row, 'workout_subtitle') || '',
-        warmup: col(row, 'warmup').toLowerCase() === 'true',
-        exercises: []
-      };
-    }
-    workoutsMap[dayKey].exercises.push({
-      name: exerciseName,
-      volume: col(row, 'exercise_volume') || '',
-      rest: col(row, 'exercise_rest') || '60 sec',
-      sets: Number(col(row, 'exercise_sets')) || 0,
-      cue: col(row, 'exercise_cue') || '',
-      note: col(row, 'exercise_note') || ''
     });
-  });
 
-  const days = [...dayMap.values()].sort((a, b) => {
-    const ai = dayOrder.indexOf(a.key);
-    const bi = dayOrder.indexOf(b.key);
-    return (ai >= 0 ? ai : 99) - (bi >= 0 ? bi : 99);
-  });
+    const days = [...dayMap.values()].sort((a, b) => {
+      const ai = dayOrder.indexOf(a.key);
+      const bi = dayOrder.indexOf(b.key);
+      return (ai >= 0 ? ai : 99) - (bi >= 0 ? bi : 99);
+    });
 
-  return { id: makeUuid(), name: programName, description: programDesc, created_at: new Date().toISOString(), days, workouts: workoutsMap };
+    templates.push({ id: makeUuid(), name: programName, description: programDesc, created_at: new Date().toISOString(), days, workouts: workoutsMap });
+  }
+
+  if (templates.length === 0) throw new Error('No valid program data found in the CSV.');
+  return templates;
 }
 
 function exportTemplateCsv(templateOrBuiltin, customName) {
@@ -1657,20 +1676,23 @@ function handleCsvImport(file) {
   const reader = new FileReader();
   reader.onload = async (event) => {
     try {
-      const template = parseTemplateCsv(event.target.result);
-      // Save to cloud first (admin only — RLS enforced server-side too)
+      const templates = parseTemplateCsv(event.target.result);
       if (state.mode === 'cloud') {
-        await saveTemplateToCloud(template);
-        // Re-fetch from cloud so all users get it
+        // Save all templates to cloud sequentially
+        for (const template of templates) {
+          await saveTemplateToCloud(template);
+        }
         await loadTemplatesFromCloud();
       } else {
         const existing = readLocalTemplates();
-        writeLocalTemplates([...existing, template]);
+        writeLocalTemplates([...existing, ...templates]);
       }
-      setActiveTemplateId(template.id);
+      // Activate the first imported template
+      setActiveTemplateId(templates[0].id);
       renderApp();
       renderTemplates();
-      showToast(`"${template.name}" imported — available to all users`);
+      const names = templates.map((t) => `"${t.name}"`).join(', ');
+      showToast(`${templates.length > 1 ? `${templates.length} programs` : names} imported — available to all users`);
     } catch (error) {
       showToast(`Import failed: ${error.message}`);
     }
