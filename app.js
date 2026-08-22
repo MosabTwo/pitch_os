@@ -5,7 +5,11 @@ const STORAGE_PREFIX = 'pitcher-os:v3';
 const SUPABASE_MODULE = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 const RING_CIRCUMFERENCE = 2 * Math.PI * 49;
 
-const $ = (selector, root = document) => root.querySelector(selector);
+const ADMIN_EMAIL = 'mossab1@gmail.com';
+function isAdmin() {
+  const email = (state.user?.email || '').trim().toLowerCase();
+  return email === ADMIN_EMAIL;
+}
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 const state = {
@@ -665,6 +669,15 @@ async function saveProfileSettings() {
       await state.supabase.auth.updateUser({ data: { display_name: name } });
     } catch (error) {
       console.warn('Auth metadata update failed', error);
+    }
+  }
+  // Save program selection (admin only)
+  if (isAdmin()) {
+    const selected = $('#programSelect').value;
+    if (selected && selected !== state.activeTemplateId) {
+      setActiveTemplateId(selected);
+      renderApp();
+      renderTemplates();
     }
   }
   queueProfileSync();
@@ -1513,11 +1526,11 @@ function parseTemplateCsv(csvText) {
   return { id: makeUuid(), name: programName, description: programDesc, created_at: new Date().toISOString(), days, workouts: workoutsMap };
 }
 
-function exportTemplateCsv(templateOrBuiltin) {
+function exportTemplateCsv(templateOrBuiltin, customName) {
   const isBuiltin = templateOrBuiltin === 'builtin';
   const days = isBuiltin ? DAYS : templateOrBuiltin.days;
   const workouts = isBuiltin ? WORKOUTS : templateOrBuiltin.workouts;
-  const name = isBuiltin ? 'Pitcher Off-season' : templateOrBuiltin.name;
+  const name = customName || (isBuiltin ? 'Pitcher Off-season' : templateOrBuiltin.name);
   const desc = isBuiltin ? 'Built-in pitcher off-season strength program' : (templateOrBuiltin.description || '');
 
   const headerRow = TEMPLATE_CSV_HEADERS.map(csvEscape).join(',');
@@ -1612,7 +1625,7 @@ function renderTemplates() {
     btn.addEventListener('click', () => {
       const id = btn.dataset.exportTemplate;
       const tpl = id === 'builtin' ? 'builtin' : state.templates.find((t) => t.id === id);
-      if (tpl !== undefined) exportTemplateCsv(tpl);
+      if (tpl !== undefined) openExportNameDialog(tpl);
     });
   });
 
@@ -1647,8 +1660,46 @@ function renderTemplates() {
   });
 }
 
+let _exportNameTarget = null;
+
+function openExportNameDialog(templateOrBuiltin) {
+  _exportNameTarget = templateOrBuiltin;
+  const defaultName = templateOrBuiltin === 'builtin' ? 'Pitcher Off-season' : (templateOrBuiltin.name || '');
+  $('#exportNameInput').value = defaultName;
+  const dialog = $('#exportNameDialog');
+  dialog.classList.remove('hidden');
+  dialog.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => { $('#exportNameInput').select(); }, 30);
+}
+
+function closeExportNameDialog() {
+  _exportNameTarget = null;
+  const dialog = $('#exportNameDialog');
+  dialog.classList.add('hidden');
+  dialog.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+
 function openAccountSheet() {
   updateAccountUi();
+
+  // Program selector — admin only
+  const group = $('#programSelectorGroup');
+  const select = $('#programSelect');
+  if (isAdmin()) {
+    const allTemplates = [
+      { id: 'builtin', name: 'Pitcher Off-season (built-in)' },
+      ...readLocalTemplates()
+    ];
+    select.innerHTML = allTemplates.map((t) =>
+      `<option value="${escapeHtml(t.id)}"${t.id === state.activeTemplateId ? ' selected' : ''}>${escapeHtml(t.name)}</option>`
+    ).join('');
+    group.style.display = '';
+  } else {
+    group.style.display = 'none';
+  }
+
   const sheet = $('#accountSheet');
   sheet.classList.remove('hidden');
   sheet.setAttribute('aria-hidden', 'false');
@@ -1860,6 +1911,19 @@ function bindGlobalEvents() {
     action?.();
   });
 
+  // Export-name dialog
+  $('#exportNameBackdrop').addEventListener('click', closeExportNameDialog);
+  $('#exportNameCancelBtn').addEventListener('click', closeExportNameDialog);
+  $('#exportNameForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!_exportNameTarget) return;
+    const customName = $('#exportNameInput').value.trim();
+    let tpl = _exportNameTarget;
+    if (customName && tpl !== 'builtin') tpl = { ...tpl, name: customName };
+    closeExportNameDialog();
+    exportTemplateCsv(tpl, customName || undefined);
+  });
+
   window.addEventListener('online', () => {
     if (state.mode === 'cloud') {
       updateSyncStatus('pending', 'Back online');
@@ -1872,7 +1936,8 @@ function bindGlobalEvents() {
 
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    if (!$('#confirmDialog').classList.contains('hidden')) closeConfirm();
+    if (!$('#exportNameDialog').classList.contains('hidden')) closeExportNameDialog();
+    else if (!$('#confirmDialog').classList.contains('hidden')) closeConfirm();
     else if (!$('#accountSheet').classList.contains('hidden')) closeAccountSheet();
   });
 }

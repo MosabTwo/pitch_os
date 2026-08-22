@@ -484,6 +484,26 @@ code { padding: .16em .35em; border-radius: 6px; color: var(--text-soft); backgr
 .template-card-body p { margin: 0; color: var(--muted); font-size: .68rem; line-height: 1.45; }
 .template-card-actions { display: flex; gap: 7px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
 
+.field-select {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  outline: none;
+  color: var(--text);
+  background: var(--surface-soft);
+  padding: 11px 13px;
+  font-size: .88rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24'%3E%3Cpath fill='%238792a2' d='m7 9 5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+.field-select:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+
 .bottom-nav { position: fixed; z-index: 70; left: 50%; bottom: 0; width: min(600px, calc(100% - 24px)); transform: translateX(-50%); display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 7px 8px calc(7px + env(safe-area-inset-bottom)); border: 1px solid var(--line); border-bottom: 0; border-radius: 19px 19px 0 0; background: var(--surface-translucent); backdrop-filter: blur(24px) saturate(1.25); box-shadow: 0 -12px 36px rgba(0,0,0,.08); }
 .nav-button { appearance: none; min-height: 50px; display: grid; place-items: center; align-content: center; gap: 4px; border: 0; border-radius: 12px; color: var(--muted); background: transparent; font-size: .6rem; font-weight: 800; cursor: pointer; }
 .nav-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

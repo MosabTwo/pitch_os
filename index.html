@@ -352,6 +352,10 @@
             <button data-theme-choice="system" type="button">System</button>
           </div>
         </div>
+        <div class="setting-group" id="programSelectorGroup" style="display:none">
+          <span class="setting-label">Active program</span>
+          <select class="field-select" id="programSelect" aria-label="Select active program"></select>
+        </div>
         <button class="btn btn--primary" id="saveProfileBtn" type="submit">Save settings</button>
       </form>
 
@@ -373,6 +377,25 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="exportNameDialog" class="confirm-dialog hidden" aria-hidden="true">
+    <button class="confirm-backdrop" id="exportNameBackdrop" type="button" aria-label="Cancel"></button>
+    <section class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="exportNameTitle">
+      <h2 id="exportNameTitle">Export program as CSV</h2>
+      <p>Give this export a name — it will appear as the program name in the file.</p>
+      <form id="exportNameForm" class="stack-form" style="margin-top:14px">
+        <label class="field">
+          <span>Program name</span>
+          <input id="exportNameInput" type="text" maxlength="60" placeholder="e.g. Catcher Off-season" autocomplete="off">
+        </label>
+        <div class="confirm-actions">
+          <button class="btn btn--surface" id="exportNameCancelBtn" type="button">Cancel</button>
+          <button class="btn btn--primary" id="exportNameOkBtn" type="submit">Download CSV</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>
